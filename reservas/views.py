@@ -1,4 +1,5 @@
 # Django
+from urllib import request
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
@@ -152,22 +153,44 @@ def transferencias(request, id):
     origen = get_object_or_404(Horario, id=id)
     reservas = Reserva.objects.filter(horario=origen).order_by("asiento")
 
-    # Cantidad total de pasajeros del horario origen
-# cargar opciones de la misma ruta SIN filtrar por capacidad todavía
+    # Cargar opciones de la misma ruta sin filtrar por capacidad todavía
     opciones = Horario.objects.filter(ruta=origen.ruta).exclude(id=origen.id)
 
-    # calcular datos de ocupación para mostrarlos en el select
+    # Calcular datos de ocupación para mostrarlos en el select
     for h in opciones:
         ocupacion, usados, capacidad = calcular_ocupacion(h)
         h.libres = capacidad - usados
         h.capacidad = capacidad
         h.ocupacion_porcentaje = round(ocupacion, 2)
 
-
+    # =====================================================================
+    # 🔥 PROCESAR POST (EL USUARIO INTENTÓ TRANSFERIR)
+    # =====================================================================
     if request.method == "POST":
         seleccionados = request.POST.getlist("reservas")
         destino = get_object_or_404(Horario, id=request.POST.get("destino"))
+
         reservas_objs = Reserva.objects.filter(id__in=seleccionados)
+
+        # 🔥 VALIDACIÓN GLOBAL: NO PERMITIR TRANSFERENCIA MIXTA
+        reservas_transferidas = [
+            r for r in reservas_objs if getattr(r, "transferida", False)
+        ]
+
+        if reservas_transferidas:
+            # Armamos un texto más amigable: "Pasajero X (Asiento Y)"
+            detalle = ", ".join(
+                f"{r.nombre_pasajero} (Asiento {r.asiento})"
+                for r in reservas_transferidas
+            )
+
+            messages.error(
+                request,
+                "No se puede transferir. Las siguientes reservas ya fueron transferidas previamente: "
+                + detalle
+            )
+            return redirect(request.path)
+
 
         # ✔ MISMA COOPERATIVA → TRANSFERIR DIRECTAMENTE
         if origen.bus.cooperativa == destino.bus.cooperativa:
@@ -178,6 +201,7 @@ def transferencias(request, id):
                 messages.error(request, msg)
                 return redirect(request.path)
 
+            messages.success(request, "Transferencia realizada correctamente.")
             return redirect("panel_operador")
 
         # ✔ OTRA COOPERATIVA → CREAR NEGOCIACIÓN
@@ -190,8 +214,12 @@ def transferencias(request, id):
             estado="PENDIENTE",
         )
 
+        messages.success(request, "Solicitud de negociación enviada.")
         return redirect("panel_operador")
 
+    # =====================================================================
+    # Mostrar página normalmente
+    # =====================================================================
     return render(request, "reservas/transferencias.html", {
         "horario": origen,
         "reservas": reservas,

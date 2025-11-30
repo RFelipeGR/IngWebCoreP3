@@ -1,10 +1,11 @@
-from reservas.models import Reserva
-from administracion.models import Horario
-
-from reservas.models import Reserva
-from administracion.models import Horario
-
 from decimal import Decimal
+
+from django.db import transaction
+from django.utils import timezone
+
+from reservas.models import Reserva
+from administracion.models import Horario
+from core.models import TransferLog
 
 
 # ----------------------------------------
@@ -12,14 +13,19 @@ from decimal import Decimal
 # ----------------------------------------
 
 def calcular_ocupacion(horario):
+    """
+    Devuelve (ocupacion_en_porcentaje, usados, capacidad_total)
+    """
     capacidad = horario.bus.capacidad
     usados = Reserva.objects.filter(horario=horario).count()
 
     if capacidad == 0:
-        return 0, usados, capacidad
+        # Sin bus o sin capacidad configurada
+        return 0, 0, 0
 
     ocupacion = (usados / capacidad) * 100
     return ocupacion, usados, capacidad
+
 
 # ----------------------------------------
 # 2) Regla de negocio: umbral mínimo
@@ -36,9 +42,7 @@ def cumple_umbral(horario, umbral=30):
     if capacidad == 0:
         return False
 
-    # 👉 OK cuando está en o por encima del umbral
     return ocupacion >= umbral
-
 
 
 # ---------------------------------------------------
@@ -64,6 +68,7 @@ def buscar_opciones_transferencia(horario_actual, cantidad_pasajeros):
 
         # Mostrar solo buses donde sí caben los pasajeros
         if libres >= cantidad_pasajeros:
+            # Atributos auxiliares para la plantilla
             h.ocupacion_porcentaje = round(ocupacion, 2)
             h.usados = usados
             h.capacidad = capacidad
@@ -73,70 +78,138 @@ def buscar_opciones_transferencia(horario_actual, cantidad_pasajeros):
     return opciones_filtradas
 
 
-
 # ---------------------------------------------------
-# 4) Ejecutar transferencia de reservas
+# 4) Ejecutar transferencia de reservas (CORE mejorado)
 # ---------------------------------------------------
 
-def ejecutar_transferencia(reservas, horario_destino):
+@transaction.atomic
+def ejecutar_transferencia(reservas, horario_destino, operador=None):
     """
-    Transfiere reservas y reasigna asientos sin duplicados.
+    Transfiere una lista de reservas hacia 'horario_destino',
+    reasignando asientos sin duplicados y con validaciones extra.
     """
 
-    # Espacio disponible
-    _, usados, capacidad = calcular_ocupacion(horario_destino)
-    libres = capacidad - usados
+    if not reservas:
+        return False, "No se enviaron reservas para transferir."
+
+    # Tomamos el horario origen de la primera reserva
+    horario_origen = reservas[0].horario
+
+    # ==================================================================
+    # 🔥 VALIDACIÓN GLOBAL: evitar transferencias mixtas o inconsistentes
+    # ==================================================================
+
+    # 1. Validar que todas las reservas vienen del mismo horario
+    horarios_distintos = [
+        r.id for r in reservas if r.horario_id != horario_origen.id
+    ]
+    if horarios_distintos:
+        return False, (
+            "Todas las reservas deben tener el mismo horario de origen. "
+            f"Reservas inválidas: {horarios_distintos}"
+        )
+
+    # 2. Validar si alguna reserva YA fue transferida
+    reservas_transferidas = [
+        r for r in reservas if getattr(r, "transferida", False)
+    ]
+    if reservas_transferidas:
+        detalle = ", ".join(
+            f"{r.nombre_pasajero} (Asiento {r.asiento})"
+            for r in reservas_transferidas
+        )   
+        return False, (
+            "No se puede realizar la transferencia. "
+            "Las siguientes reservas ya fueron transferidas previamente: "
+            + detalle
+        )
+
+
+    # ==================================================================
+    # 🔥 VALIDACIÓN DE HORARIO DESTINO (no transferir a buses ya salidos)
+    # ==================================================================
+
+    now = timezone.now()
+    if hasattr(horario_destino, "fecha_salida"):
+        if horario_destino.fecha_salida <= now:
+            return False, "No se puede transferir a un bus que ya salió."
+
+    # ==================================================================
+    # 🔥 VALIDACIÓN DE CAPACIDAD ANTES DE TRANSFERIR
+    # ==================================================================
+
+    ocup_origen_antes, usados_origen_antes, cap_origen = calcular_ocupacion(horario_origen)
+    ocup_destino_antes, usados_destino_antes, cap_destino = calcular_ocupacion(horario_destino)
+
     cantidad = len(reservas)
+    libres_destino_antes = cap_destino - usados_destino_antes
 
-    if cantidad > libres:
-        return False, f"No se pueden transferir {cantidad} pasajeros. Solo hay {libres} asientos libres."
+    if libres_destino_antes < cantidad:
+        return False, (
+            f"No se pueden transferir {cantidad} pasajeros. "
+            f"Solo hay {libres_destino_antes} asientos libres."
+        )
 
-    # Obtener los asientos ya usados en el destino
+    # ==================================================================
+    # 🔥 ASIGNACIÓN DE ASIENTOS EN DESTINO
+    # ==================================================================
+
     asientos_ocupados = set(
         Reserva.objects.filter(horario=horario_destino)
         .values_list("asiento", flat=True)
     )
 
-    # Buscar el siguiente asiento disponible
     def siguiente_asiento_libre():
-        for i in range(1, capacidad + 1):
+        for i in range(1, cap_destino + 1):
             if i not in asientos_ocupados:
                 asientos_ocupados.add(i)
                 return i
         return None
 
-    # Transferir reasignando asientos únicos
+    # ==================================================================
+    # 🔥 TRANSFERENCIA REAL (cambia asiento + horario)
+    # ==================================================================
+
     for r in reservas:
         nuevo_asiento = siguiente_asiento_libre()
         if nuevo_asiento is None:
-            return False, "Error inesperado: no se encontró asiento libre."
+            raise ValueError("Error inesperado: no se encontró asiento libre en el bus destino.")
 
         r.asiento = nuevo_asiento
         r.horario = horario_destino
+        r.transferida = True   # marcar como transferida
         r.save()
 
+    # ==================================================================
+    # 🔥 VALIDACIÓN DE CAPACIDAD DESPUÉS DE TRANSFERIR
+    # ==================================================================
+
+    ocup_origen_despues, usados_origen_despues, _ = calcular_ocupacion(horario_origen)
+    ocup_destino_despues, usados_destino_despues, _ = calcular_ocupacion(horario_destino)
+    libres_destino_despues = cap_destino - usados_destino_despues
+
+    if libres_destino_despues < 0:
+        raise ValueError("La transferencia provocó sobrecapacidad en el bus destino.")
+
+    # ==================================================================
+    # 🔥 REGISTRO EN LOG DE AUDITORÍA
+    # ==================================================================
+
+    TransferLog.objects.create(
+        operador=operador,
+        origen=horario_origen,
+        destino=horario_destino,
+        reservas=[r.id for r in reservas],
+        cantidad_pasajeros=cantidad,
+        capacidad_origen_antes=cap_origen - usados_origen_antes,
+        capacidad_origen_despues=cap_origen - usados_origen_despues,
+        capacidad_destino_antes=libres_destino_antes,
+        capacidad_destino_despues=libres_destino_despues,
+        estado="OK",
+        mensaje="Transferencia realizada correctamente."
+    )
+
     return True, "Transferencia realizada correctamente."
-
-
-
-
-
-
-# core/services.py
-
-# ----------------------------------------
-# TARIFAS APROXIMADAS POR RUTA
-# (simulación para el CORE de negocio)
-# ----------------------------------------
-TARIFAS_POR_RUTA = {
-    ("Quito", "Guayaquil"): Decimal("18.00"),
-    ("Quito", "Cuenca"): Decimal("16.00"),
-    ("Quito", "Esmeraldas"): Decimal("14.00"),
-    ("Quito", "Machala"): Decimal("17.00"),
-    ("Guayaquil", "Quito"): Decimal("18.00"),
-    ("Cuenca", "Quito"): Decimal("16.00"),
-    # puedes agregar más rutas si quieres
-}
 
 
 def obtener_tarifa_ruta(ruta):
@@ -147,20 +220,6 @@ def obtener_tarifa_ruta(ruta):
     """
     clave = (ruta.origen, ruta.destino)
     return TARIFAS_POR_RUTA.get(clave, Decimal("15.00"))
-
-
-def calcular_ocupacion(horario):
-    """
-    Devuelve (ocupación_en_porcentaje, usados, capacidad_total)
-    """
-    capacidad = horario.bus.capacidad
-    usados = Reserva.objects.filter(horario=horario).count()
-
-    if capacidad == 0:
-        return 0, 0, 0
-
-    ocupacion = (usados / capacidad) * 100
-    return ocupacion, usados, capacidad
 
 
 def factor_urgencia(ocupacion):

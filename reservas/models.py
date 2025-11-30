@@ -6,10 +6,11 @@ class Reserva(models.Model):
     nombre_pasajero = models.CharField(max_length=100)
     cedula = models.CharField(max_length=10)
     asiento = models.PositiveIntegerField()
+    # NUEVO: marca si ya fue usada en una transferencia
+    transferida = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.nombre_pasajero} - Asiento {self.asiento}"
-
 
 
 class Negociacion(models.Model):

@@ -1,52 +1,106 @@
+{% extends "reservas/base.html" %}
+
+{% block content %}
 <h1>Transferencias - {{ horario.ruta }}</h1>
+
+
+
+<!-- 💥 MODAL DE ERRORES (PÉGALO AQUÍ) -->
+<div class="modal fade" id="modalError" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Error en la transferencia</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalErrorBody">
+        <!-- Aquí pondremos el mensaje -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ====================================================== -->
+<!-- 🔔 MENSAJES (ERROR / ÉXITO) -->
+<!-- ====================================================== -->
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert"
+            style="margin-bottom: 20px; font-size: 16px;">
+            
+            {% if message.tags == "error" %}
+                ❌ <strong>Error:</strong><br>
+            {% endif %}
+            {% if message.tags == "success" %}
+                ✅ <strong>Éxito:</strong><br>
+            {% endif %}
+            
+            {{ message }}
+
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    {% endfor %}
+{% endif %}
 
 <form method="POST">
     {% csrf_token %}
 
     <h3>Seleccione pasajeros a mover:</h3>
+
     <div style="margin-bottom:10px;">
         <button type="button" id="selectAll">Seleccionar todo</button>
         <button type="button" id="unselectAll">Quitar selección</button>
     </div>
 
     {% for r in reservas %}
-        <label>
-            <input type="checkbox" name="reservas" value="{{ r.id }}" class="pasajeroCheck">
+        <label style="display:block; margin-bottom:5px;">
+            <input 
+                type="checkbox" 
+                name="reservas" 
+                value="{{ r.id }}" 
+                class="pasajeroCheck">
             {{ r.nombre_pasajero }} - Asiento {{ r.asiento }}
-        </label><br>
+        </label>
     {% endfor %}
 
-    <h3>Seleccionar horario destino:</h3>
-    <select name="destino" id="destinoSelect" required>
+    <h3 style="margin-top:20px;">Seleccionar horario destino:</h3>
+
+    <select name="destino" id="destinoSelect" required style="padding:5px;">
         <option value="">Seleccione...</option>
         {% for h in opciones %}
             <option value="{{ h.id }}" 
                     data-libres="{{ h.libres }}"
                     data-coop="{{ h.bus.cooperativa.id }}">
                 {{ h.hora_salida|date:"M d, Y g:i a" }} — 
-                Bus {{ h.bus.placa }} ({{ h.bus.cooperativa.nombre }}) —
-                {{ h.libres }} libres / {{ h.capacidad }} total —
+                Bus {{ h.bus.placa }} ({{ h.bus.cooperativa.nombre }}) — 
+                {{ h.libres }} libres / {{ h.capacidad }} total — 
                 Ocupación: {{ h.ocupacion_porcentaje }}%
             </option>
         {% endfor %}
     </select>
 
     <!-- SECCIÓN ECONÓMICA DINÁMICA -->
-    <div id="negociacionBox" style="display:none; margin-top:20px; border:1px solid #ccc; padding:10px;">
+    <div id="negociacionBox" 
+         style="display:none; margin-top:20px; border:1px solid #ccc; padding:10px; border-radius:6px;">
+         
         <h3>Propuesta económica</h3>
 
         <label>Costo por pasajero ($):</label><br>
         <input type="number" step="0.01" id="costoInput" name="costo_por_pasajero" value="3.50"><br><br>
 
         <label>Comentario:</label><br>
-        <textarea name="comentario_origen" rows="3"></textarea>
+        <textarea name="comentario_origen" rows="3" style="width:100%;"></textarea>
 
         <hr>
 
         <h3>📊 Análisis económico de la transferencia</h3>
 
-        <table border="1" cellpadding="6" style="width:100%; text-align:center;">
-            <thead>
+        <table border="1" cellpadding="6" style="width:100%; text-align:center; border-collapse:collapse;">
+            <thead style="background:#eee;">
                 <tr>
                     <th>Indicador</th>
                     <th>Origen (A)</th>
@@ -89,89 +143,111 @@
     </div>
 
     <br>
-    <button type="submit">Enviar</button>
+    <button type="submit" 
+            style="padding:10px 20px; background:#28a745; color:white; border:none; border-radius:4px;">
+        🟢 Enviar
+    </button>
 </form>
-
-<script>
-const select = document.getElementById("destinoSelect");
-const box = document.getElementById("negociacionBox");
-const checkboxes = document.querySelectorAll(".pasajeroCheck");
-const costoInput = document.getElementById("costoInput");
-
-function calcularEconomia() {
-    let n = document.querySelectorAll(".pasajeroCheck:checked").length;
-    let costo = parseFloat(costoInput.value);
-
-    let costo_operativo = 1.20 * n;
-    let admin = 0.30 * n;
-    let ingreso = costo * n;
-    let comision = ingreso * 0.05;
-
-    document.getElementById("pasA").textContent = n;
-    document.getElementById("pasB").textContent = n;
-    document.getElementById("ingresoA").textContent = "$" + ingreso.toFixed(2);
-    document.getElementById("ingresoB").textContent = "$" + ingreso.toFixed(2);
-    document.getElementById("costoB").textContent = "$" + costo_operativo.toFixed(2);
-    document.getElementById("adminA").textContent = "$" + admin.toFixed(2);
-    document.getElementById("comisionA").textContent = "$" + comision.toFixed(2);
-
-    let gan_A = ingreso - admin - comision;
-    let gan_B = ingreso - costo_operativo;
-
-    document.getElementById("gananciaA").textContent = "$" + gan_A.toFixed(2);
-    document.getElementById("gananciaB").textContent = "$" + gan_B.toFixed(2);
-}
-
-checkboxes.forEach(cb => cb.addEventListener("change", calcularEconomia));
-costoInput.addEventListener("input", calcularEconomia);
-
-select.addEventListener("change", function() {
-    const coopDestino = this.options[this.selectedIndex].dataset.coop;
-    const coopOrigen = "{{ horario.bus.cooperativa.id }}";
-
-    box.style.display = (coopDestino !== coopOrigen) ? "block" : "none";
-    calcularEconomia();
-});
-
-function actualizarOpcionesDestino() {
-    const n = document.querySelectorAll(".pasajeroCheck:checked").length;
-    const opciones = document.querySelectorAll("#destinoSelect option");
-
-    opciones.forEach(opt => {
-        if (!opt.dataset.libres) return; // ignorar primer option
-
-        const libres = parseInt(opt.dataset.libres);
-
-        // mostrar solo buses con espacio suficiente
-        opt.hidden = libres < n;
-    });
-}
-
-checkboxes.forEach(cb => cb.addEventListener("change", actualizarOpcionesDestino));
-
-
-
-
-
-const selectAllBtn = document.getElementById("selectAll");
-const unselectAllBtn = document.getElementById("unselectAll");
-
-// Seleccionar todo
-selectAllBtn.addEventListener("click", () => {
-    checkboxes.forEach(cb => cb.checked = true);
-    actualizarOpcionesDestino();
-    calcularEconomia();
-});
-
-// Quitar selección
-unselectAllBtn.addEventListener("click", () => {
-    checkboxes.forEach(cb => cb.checked = false);
-    actualizarOpcionesDestino();
-    calcularEconomia();
-});
-
-
-</script>
 
 <br>
 <a href="{% url 'panel_operador' %}">⬅ Volver</a>
+
+
+<!-- ======================= -->
+<!-- TU MISMO JS TAL CUAL -->
+<!-- ======================= -->
+
+<script>
+    // (todo tu script queda igual)
+    const select = document.getElementById("destinoSelect");
+    const box = document.getElementById("negociacionBox");
+    const checkboxes = document.querySelectorAll(".pasajeroCheck");
+    const costoInput = document.getElementById("costoInput");
+
+    function calcularEconomia() {
+        let n = document.querySelectorAll(".pasajeroCheck:checked").length;
+        let costo = parseFloat(costoInput.value);
+
+        let costo_operativo = 1.20 * n;
+        let admin = 0.30 * n;
+        let ingreso = costo * n;
+        let comision = ingreso * 0.05;
+
+        document.getElementById("pasA").textContent = n;
+        document.getElementById("pasB").textContent = n;
+        document.getElementById("ingresoA").textContent = "$" + ingreso.toFixed(2);
+        document.getElementById("ingresoB").textContent = "$" + ingreso.toFixed(2);
+        document.getElementById("costoB").textContent = "$" + costo_operativo.toFixed(2);
+        document.getElementById("adminA").textContent = "$" + admin.toFixed(2);
+        document.getElementById("comisionA").textContent = "$" + comision.toFixed(2);
+
+        let gan_A = ingreso - admin - comision;
+        let gan_B = ingreso - costo_operativo;
+
+        document.getElementById("gananciaA").textContent = "$" + gan_A.toFixed(2);
+        document.getElementById("gananciaB").textContent = "$" + gan_B.toFixed(2);
+    }
+
+    checkboxes.forEach(cb => cb.addEventListener("change", calcularEconomia));
+    costoInput.addEventListener("input", calcularEconomia);
+
+    select.addEventListener("change", function() {
+        const coopDestino = this.options[this.selectedIndex].dataset.coop;
+        const coopOrigen = "{{ horario.bus.cooperativa.id }}";
+
+        box.style.display = (coopDestino !== coopOrigen) ? "block" : "none";
+        calcularEconomia();
+    });
+
+    function actualizarOpcionesDestino() {
+        const n = document.querySelectorAll(".pasajeroCheck:checked").length;
+        const opciones = document.querySelectorAll("#destinoSelect option");
+
+        opciones.forEach(opt => {
+            if (!opt.dataset.libres) return; // ignorar primer option
+            const libres = parseInt(opt.dataset.libres);
+            opt.hidden = libres < n; // ocultar si no hay cupos suficientes
+        });
+    }
+
+    checkboxes.forEach(cb => cb.addEventListener("change", actualizarOpcionesDestino));
+
+    const selectAllBtn = document.getElementById("selectAll");
+    const unselectAllBtn = document.getElementById("unselectAll");
+
+    selectAllBtn.addEventListener("click", () => {
+        checkboxes.forEach(cb => cb.checked = true);
+        actualizarOpcionesDestino();
+        calcularEconomia();
+    });
+
+    unselectAllBtn.addEventListener("click", () => {
+        checkboxes.forEach(cb => cb.checked = false);
+        actualizarOpcionesDestino();
+        calcularEconomia();
+    });
+</script>
+
+{% if messages %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    let modalBody = document.getElementById("modalErrorBody");
+    let mensajes = "";
+
+    {% for message in messages %}
+        {% if message.tags == "error" %}
+            mensajes += `<div class="alert alert-danger mb-2">{{ message|safe }}</div>`;
+        {% endif %}
+    {% endfor %}
+
+    if (mensajes.trim() !== "") {
+        modalBody.innerHTML = mensajes;
+        let modal = new bootstrap.Modal(document.getElementById('modalError'));
+        modal.show();
+    }
+});
+</script>
+{% endif %}
+
+
+{% endblock %}
