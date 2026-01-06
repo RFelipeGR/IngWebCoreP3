@@ -251,9 +251,20 @@ def transferir_pasajeros(request, reserva_id, horario_id):
     horario_destino = get_object_or_404(Horario, id=horario_id)
 
     if request.method == "POST":
-        cantidad = int(request.POST.get("cantidad"))
-        ejecutar_transferencia(reserva, horario_destino, cantidad)
+        reservas_qs = Reserva.objects.filter(id=reserva.id)
+
+        ok, msg = ejecutar_transferencia(
+            reservas_qs,
+            horario_destino,
+            operador=request.user
+        )
+
+        if not ok:
+            messages.error(request, msg)
+            return redirect("panel_operador")
+
         return render(request, "reservas/transferencia_exitosa.html")
+
 
     return redirect('panel_operador')
 
@@ -305,7 +316,12 @@ def transferencias(request, id):
         # ✔ MISMA COOPERATIVA → TRANSFERIR DIRECTAMENTE
         if origen.bus.cooperativa == destino.bus.cooperativa:
 
-            ok, msg = ejecutar_transferencia(reservas_objs, destino)
+            ok, msg = ejecutar_transferencia(
+    reservas_objs,
+    destino,
+    operador=request.user
+)
+
 
             if not ok:
                 messages.error(request, msg)
@@ -387,9 +403,11 @@ def negociacion(request):
 
     if request.method == "POST":
         ejecutar_transferencia(
-            Reserva.objects.filter(id__in=data["reservas"]),
-            destino
-        )
+    Reserva.objects.filter(id__in=data["reservas"]),
+    destino,
+    operador=request.user
+)
+
         del request.session["transferencia"]
         return redirect("panel_operador")
 
@@ -421,9 +439,11 @@ def responder_negociacion(request, id):
     if request.method == "POST":
         if "aceptar" in request.POST:
             ejecutar_transferencia(
-                Reserva.objects.filter(id__in=nego.reservas),
-                nego.destino
-            )
+    Reserva.objects.filter(id__in=nego.reservas),
+    nego.destino,
+    operador=request.user
+)
+
             nego.estado = "ACEPTADA"
             nego.save()
             return redirect("solicitudes_negociacion")
@@ -438,18 +458,29 @@ def responder_negociacion(request, id):
     return render(request, "reservas/responder_negociacion.html", {"nego": nego})
 
 
+@login_required
 def aceptar_negociacion(request, id):
-    negociacion = get_object_or_404(Negociacion, id=id)
-    reservas = Reserva.objects.filter(id__in=negociacion.reservas)
+    nego = get_object_or_404(Negociacion, id=id)
 
-    for r in reservas:
-        r.horario = negociacion.destino
-        r.save()
+    reservas_qs = Reserva.objects.filter(id__in=nego.reservas)
 
-    negociacion.estado = "ACEPTADA"
-    negociacion.save()
+    ok, msg = ejecutar_transferencia(
+    reservas_qs,
+    nego.destino,
+    operador=request.user
+)
 
+
+    if not ok:
+        messages.error(request, msg)
+        return redirect("panel_operador")
+
+    nego.estado = "ACEPTADA"
+    nego.save()
+
+    messages.success(request, "Negociación aceptada y transferencia aplicada correctamente.")
     return redirect("panel_operador")
+
 
 
 def rechazar_negociacion(request, id):

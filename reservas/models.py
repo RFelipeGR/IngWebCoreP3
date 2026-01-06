@@ -7,23 +7,14 @@ class Reserva(models.Model):
     nombre_pasajero = models.CharField(max_length=100)
     cedula = models.CharField(max_length=10)
     asiento = models.PositiveIntegerField()
-    # Marca si ya fue usada en una transferencia
     transferida = models.BooleanField(default=False)
+
+    # ✅ NUEVO: marca si queda en restricción (cross-coop)
+    restringida = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.nombre_pasajero} - Asiento {self.asiento}"
 
-    class Meta:
-        permissions = [
-            ("can_reactivar", "Puede reactivar pasajeros transferidos"),
-        ]
-        # 🚨 NUEVO: no permitir asientos repetidos en el mismo horario
-        constraints = [
-            models.UniqueConstraint(
-                fields=["horario", "asiento"],
-                name="unique_asiento_por_horario",
-            ),
-        ]
 
 
 class Negociacion(models.Model):

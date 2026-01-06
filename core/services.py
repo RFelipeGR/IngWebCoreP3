@@ -158,7 +158,8 @@ def ejecutar_transferencia(reservas, horario_destino, operador=None):
 
     # Asientos ya ocupados en el horario destino
     asientos_ocupados = set(
-        Reserva.objects.filter(horario=horario_destino)
+        Reserva.objects.select_for_update()
+        .filter(horario=horario_destino)
         .values_list("asiento", flat=True)
     )
 
@@ -173,6 +174,11 @@ def ejecutar_transferencia(reservas, horario_destino, operador=None):
     # 🔥 TRANSFERENCIA REAL (cambia asiento + horario)
     # ==================================================================
 
+    coop_origen = horario_origen.bus.cooperativa_id
+    coop_destino = horario_destino.bus.cooperativa_id
+    es_cross_coop = (coop_origen != coop_destino)
+
+    
     for r in reservas:
         nuevo_asiento = siguiente_asiento_libre()
         if nuevo_asiento is None:
@@ -182,10 +188,14 @@ def ejecutar_transferencia(reservas, horario_destino, operador=None):
         if Reserva.objects.filter(horario=horario_destino, asiento=nuevo_asiento).exists():
             raise ValidationError(f"El asiento {nuevo_asiento} ya está ocupado en el horario destino.")
 
+        # ✅ Guardar dentro del loop (esto era tu error)
         r.asiento = nuevo_asiento
         r.horario = horario_destino
-        r.transferida = True   # marcar como transferida
+        r.transferida = True
+        r.restringida = es_cross_coop
         r.save()
+
+
 
     # ==================================================================
     # 🔥 VALIDACIÓN DE CAPACIDAD DESPUÉS DE TRANSFERIR
