@@ -1,0 +1,3 @@
+from .reserva_repository import ReservaRepository
+from .horario_repository import HorarioRepository
+from .transferlog_repository import TransferLogRepository
