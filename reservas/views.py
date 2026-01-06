@@ -12,13 +12,14 @@ from core.models import IncidenteCooperativa
 
 
 # Servicios
-from core.services import (
+from core.services_old import (
+    calcular_ocupacion,
     buscar_opciones_transferencia,
     ejecutar_transferencia,
-    calcular_costos_negociacion,
-    calcular_ocupacion,
     cumple_umbral,
 )
+
+
 
 # Otros
 from django.http import HttpResponse
@@ -38,13 +39,13 @@ from django.contrib import messages
 from administracion.models import Operador, Horario
 from reservas.models import Reserva, Negociacion
 
-from core.services import (
+from core.services_old import (
+    calcular_ocupacion,
     buscar_opciones_transferencia,
     ejecutar_transferencia,
-    calcular_ocupacion,
-    calcular_costos_negociacion,
     cumple_umbral,
 )
+
 
 
 # -----------------------------------------------------------

@@ -42,10 +42,21 @@
   {% if messages %}
     <ul>
       {% for msg in messages %}
-        <li style="color:red;">{{ msg }}</li>
+        <li
+          style="
+            color:
+              {% if msg.tags == 'success' %}green
+              {% elif msg.tags == 'warning' %}orange
+              {% else %}red{% endif %};
+          "
+        >
+          {{ msg }}
+        </li>
       {% endfor %}
     </ul>
   {% endif %}
+
+
 </div>
 
 </body>
