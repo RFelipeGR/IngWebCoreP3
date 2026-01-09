@@ -23,7 +23,7 @@ Este repositorio documenta una versión funcional y evaluable del sistema. A lo 
 
 ## 🌐 Proyecto deployado en Render
 
-🔗 https://ingwebcore.onrender.com
+🔗 https://ingwebcorep3.onrender.com
 
 Funcionalidades disponibles en producción:
 - Dashboard para operadores
@@ -169,27 +169,27 @@ python manage.py runserver
 
 ## 🚨 Limitaciones y mejoras futuras
 
--Código duplicado en algunas áreas
+- Código duplicado en algunas áreas
 
--Scripts que pueden convertirse en management commands
+- Scripts que pueden convertirse en management commands
 
--Tests limitados
+- Tests limitados
 
--Validaciones de concurrencia por mejorar
+- Validaciones de concurrencia por mejorar
 
 ---
 
 ## 🎯 Estado actual del sistema
 
--Sistema funcional
+- Sistema funcional
 
--Transferencias atómicas con logs
+- Transferencias atómicas con logs
 
--Aplicación de SOLID
+- Aplicación de SOLID
 
--Uso de patrones de diseño
+- Uso de patrones de diseño
 
--Base sólida para futuras mejoras
+- Base sólida para futuras mejoras
 
 ---
 
