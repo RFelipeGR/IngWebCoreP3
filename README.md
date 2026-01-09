@@ -141,36 +141,33 @@ git clone https://github.com/RFelipeGR/IngWebCore.git
 cd IngWebCore
 ```
 
-
-
-
-#Entorno virtual
+### Entorno virtual
 ```bash
 python -m venv env
 source env/bin/activate
 ```
 ---
 
-#Dependencias
+### Dependencias
 ```bash
 pip install -r requirements.txt
 ```
 ---
 
-#Migraciones
+### Migraciones
 ```bash
 python manage.py makemigrations
 python manage.py migrate
 ```
 ---
 
-#Ejecutar servidor
+### Ejecutar servidor
 ```bash
 python manage.py runserver
 ```
 ---
 
-#🚨 Limitaciones y mejoras futuras
+## 🚨 Limitaciones y mejoras futuras
 
 -Código duplicado en algunas áreas
 
@@ -182,7 +179,7 @@ python manage.py runserver
 
 ---
 
-#🎯 Estado actual del sistema
+## 🎯 Estado actual del sistema
 
 -Sistema funcional
 
@@ -196,29 +193,12 @@ python manage.py runserver
 
 ---
 
-#👤 Autores
+## 👤 Autores
 
--Víctor A. Suquilanda
--Roberto F. Guaña
--Carrera de Ingeniería de Software
--Año: 2025
+**Víctor A. Suquilanda** | **Roberto F. Guaña**
 
+📧 Carrera de Ingeniería de Software
+
+📅 Año: 2026
 
 ---
-
-
-Dime y lo dejamos **100% listo para entrega**.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
